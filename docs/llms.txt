@@ -210,7 +210,7 @@ Unsupported architectures fail early with an explicit error.
 
 ## How Downloads Are Resolved
 
-The installer downloads the official Google Antigravity download page, finds the JavaScript bundle that contains download metadata, and extracts the matching official tarball URL for the current Linux architecture and selected product.
+The installer fetches the official Google Antigravity download page (https://antigravity.google/download) and extracts the matching official tarball URL for the current Linux architecture and selected product directly from the live download page (with JS bundle fallback).
 
 Known product IDs used by the script:
 
