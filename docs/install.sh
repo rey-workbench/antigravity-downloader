@@ -19,6 +19,14 @@ DO_PRINT_DOWNLOADS=0
 FORCE=0
 YES=0
 INSTALLER_URL="${ANTIGRAVITY_LINUX_INSTALLER_URL:-}"
+TMP_CLEANUP_DIR=""
+
+cleanup() {
+  if [ -n "${TMP_CLEANUP_DIR:-}" ] && [ -d "$TMP_CLEANUP_DIR" ]; then
+    rm -rf "$TMP_CLEANUP_DIR"
+  fi
+}
+trap cleanup EXIT
 
 log() { printf '%s\n' "$*"; }
 warn() { printf 'WARN: %s\n' "$*" >&2; }
@@ -505,6 +513,7 @@ print_downloads() {
   local tmp_parent="${TMPDIR:-/tmp}"
   local tmpdir
   tmpdir=$(mktemp -d "$tmp_parent/$PROJECT_NAME.XXXXXX")
+  TMP_CLEANUP_DIR="$tmpdir"
   local page_file
   page_file=$(resolve_download_page "$tmpdir")
   if [ "$INSTALL_DESKTOP" -eq 1 ]; then
@@ -518,6 +527,7 @@ print_downloads() {
     log "Antigravity IDE $version: $url"
   fi
   rm -rf "$tmpdir"
+  TMP_CLEANUP_DIR=""
 }
 
 print_success_summary() {
@@ -577,7 +587,7 @@ main() {
   mkdir -p "$tmp_parent"
   local tmpdir
   tmpdir=$(mktemp -d "$tmp_parent/$PROJECT_NAME.XXXXXX")
-  trap 'rm -rf "$tmpdir"' EXIT
+  TMP_CLEANUP_DIR="$tmpdir"
   local page_file
   page_file=$(resolve_download_page "$tmpdir")
   [ "$INSTALL_DESKTOP" -eq 1 ] && install_desktop_app "$tmpdir" "$page_file"
