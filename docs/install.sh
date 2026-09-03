@@ -221,16 +221,12 @@ DESKTOP
 }
 
 install_manager_command() {
-  local installer_url="$INSTALLER_URL"
+  local installer_url="${INSTALLER_URL:-https://rey-workbench.github.io/antigravity-downloader/install.sh}"
   cat > /usr/local/bin/antigravity-linux <<SH
 #!/usr/bin/env bash
 set -euo pipefail
-SCRIPT_URL="$installer_url"
-if [ -z "\$SCRIPT_URL" ]; then
-  echo "No installer URL was stored." >&2
-  echo "Reinstall with ANTIGRAVITY_LINUX_INSTALLER_URL set, or run install.sh locally." >&2
-  exit 1
-fi
+SCRIPT_URL="${installer_url}"
+[ -n "\$SCRIPT_URL" ] || SCRIPT_URL="https://rey-workbench.github.io/antigravity-downloader/install.sh"
 if [ "\$(id -u)" -eq 0 ]; then
   curl -fsSL "\$SCRIPT_URL" | env ANTIGRAVITY_LINUX_INSTALLER_URL="\$SCRIPT_URL" bash -s -- "\$@"
 else
