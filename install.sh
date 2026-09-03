@@ -117,9 +117,31 @@ install_deps_debian() {
   if command -v apt-get >/dev/null 2>&1; then
     export DEBIAN_FRONTEND=noninteractive
     apt-get update
-    apt-get install -y ca-certificates curl tar python3 desktop-file-utils xdg-utils
+    apt-get install -y ca-certificates curl tar python3 desktop-file-utils xdg-utils aria2 2>/dev/null || \
+      apt-get install -y ca-certificates curl tar python3 desktop-file-utils xdg-utils
   else
     for c in curl tar python3; do need "$c"; done
+  fi
+}
+
+download_app() {
+  local id="$1" tmpdir="$2" page_file="$3"
+  local label bin root archive install_sub target version_file version url
+  label="$(product_meta "$id" label)"
+  bin="$(product_meta "$id" bin)"
+  root="$(product_meta "$id" root)"
+  archive="$(product_meta "$id" archive)"
+  install_sub="$(product_meta "$id" sub)"
+  target="$root/$install_sub/$bin"
+  version_file="$root/.antigravity-linux-version"
+
+  read -r version url < <(resolve_download "$page_file" "$id")
+  if [ "$FORCE" -eq 0 ] && [ -x "$target" ] && [ "$(installed_version "$version_file")" = "$version" ]; then
+    return 0
+  fi
+  if [ ! -f "$tmpdir/$archive" ]; then
+    log "Downloading $label $version for $AG_PLATFORM from Google..."
+    fast_download "$url" "$tmpdir/$archive"
   fi
 }
 
@@ -145,8 +167,7 @@ install_app() {
     return
   fi
 
-  log "Downloading $label $version for $AG_PLATFORM from Google..."
-  curl -fsSL --retry 3 -o "$tmpdir/$archive" "$url"
+  download_app "$id" "$tmpdir" "$page_file"
   local top_dir
   top_dir=$(tar -tzf "$tmpdir/$archive" | sed -n '1{s#/.*##;p;q}')
   [ "$top_dir" = "$top_expected" ] || err "Unexpected $label archive layout: $top_dir"
@@ -258,28 +279,7 @@ print_success_summary() {
 
 main() {
   if [ "$DO_STATUS" -eq 1 ]; then
-    if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/status.sh" ]; then
-      exec bash "$SCRIPT_DIR/status.sh"
-    fi
-    log "Antigravity Linux status"
-    for id in "${PRODUCTS[@]}"; do
-      local label bin root ver_file
-      label="$(product_meta "$id" label)"
-      bin="$(product_meta "$id" bin)"
-      root="$(product_meta "$id" root)"
-      ver_file="$root/.antigravity-linux-version"
-      if [ -x "/usr/local/bin/$bin" ]; then
-        log "- $label: installed ($(installed_version "$ver_file"))"
-        log "  Command: /usr/local/bin/$bin"
-      else
-        log "- $label: not installed by this helper"
-      fi
-    done
-    if [ -x /usr/local/bin/antigravity-linux ]; then
-      log "- Update helper: installed"
-    else
-      log "- Update helper: not installed"
-    fi
+    show_status
     exit 0
   fi
 
@@ -289,20 +289,9 @@ main() {
   fi
 
   if [ "$DO_UNINSTALL" -eq 1 ]; then
-    if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/uninstall.sh" ]; then
-      exec bash "$SCRIPT_DIR/uninstall.sh" "$@"
-    fi
     require_root_or_reexec "$@"
-    # Preserves exact paths required by test suite (/opt/antigravity.new, /opt/antigravity-ide.new)
-    rm -rf /opt/antigravity /opt/antigravity.new /opt/antigravity.previous /opt/antigravity-ide /opt/antigravity-ide.new /opt/antigravity-ide.previous
-    for id in "${PRODUCTS[@]}"; do
-      local bin
-      bin="$(product_meta "$id" bin)"
-      rm -f "/usr/local/bin/$bin" "/usr/share/applications/$bin.desktop" "/usr/share/icons/hicolor/512x512/apps/$bin.png"
-    done
-    rm -f /usr/local/bin/update-antigravity /usr/local/bin/update-antigravity-ide /usr/local/bin/antigravity-linux
-    refresh_desktop_caches
-    log "Removed helper-managed Antigravity files."
+    # Removes /opt/antigravity.new /opt/antigravity-ide.new
+    uninstall_all
     exit 0
   fi
 
@@ -315,6 +304,18 @@ main() {
   TMP_CLEANUP_DIR="$tmpdir"
   local page_file
   page_file=$(resolve_download_page "$tmpdir")
+
+  # Concurrent pre-download for selected products
+  local pids=()
+  for id in "${PRODUCTS[@]}"; do
+    if is_product_selected "$id"; then
+      download_app "$id" "$tmpdir" "$page_file" &
+      pids+=($!)
+    fi
+  done
+  for pid in "${pids[@]}"; do
+    wait "$pid"
+  done
 
   for id in "${PRODUCTS[@]}"; do
     if is_product_selected "$id"; then

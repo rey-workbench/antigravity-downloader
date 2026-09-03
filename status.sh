@@ -13,22 +13,4 @@ else
   source <(curl -fsSL "$BASE_URL/lib/common.sh")
 fi
 
-log "Antigravity Linux status"
-for id in "${PRODUCTS[@]}"; do
-  label="$(product_meta "$id" label)"
-  bin="$(product_meta "$id" bin)"
-  root="$(product_meta "$id" root)"
-  ver_file="$root/.antigravity-linux-version"
-  if [ -x "/usr/local/bin/$bin" ]; then
-    log "- $label: installed ($(installed_version "$ver_file"))"
-    log "  Command: /usr/local/bin/$bin"
-  else
-    log "- $label: not installed by this helper"
-  fi
-done
-
-if [ -x /usr/local/bin/antigravity-linux ]; then
-  log "- Update helper: installed"
-else
-  log "- Update helper: not installed"
-fi
+show_status

@@ -106,6 +106,20 @@ installed_version() {
   cat "$file" 2>/dev/null || true
 }
 
+fast_download() {
+  local url="$1" dest="$2"
+  if command -v aria2c >/dev/null 2>&1; then
+    local dir filename
+    dir="$(dirname "$dest")"
+    filename="$(basename "$dest")"
+    aria2c -q --show-console-readout=false --summary-interval=0 \
+      -x 8 -s 8 -j 8 -k 1M --allow-overwrite=true \
+      -d "$dir" -o "$filename" "$url" || curl -fsSL --retry 3 -o "$dest" "$url"
+  else
+    curl -fsSL --retry 3 -o "$dest" "$url"
+  fi
+}
+
 # ==============================================================================
 # 4. Download Resolver
 # ==============================================================================
@@ -186,8 +200,41 @@ sys.exit(f'Could not find official {label} tarball for {platform} on official Go
 PY
 }
 
-resolve_desktop_download() { resolve_download "$1" desktop; }
-resolve_ide_download() { resolve_download "$1" ide; }
+show_status() {
+  log "Antigravity Linux status"
+  for id in "${PRODUCTS[@]}"; do
+    local label bin root ver_file
+    label="$(product_meta "$id" label)"
+    bin="$(product_meta "$id" bin)"
+    root="$(product_meta "$id" root)"
+    ver_file="$root/.antigravity-linux-version"
+    if [ -x "/usr/local/bin/$bin" ]; then
+      log "- $label: installed ($(installed_version "$ver_file"))"
+      log "  Command: /usr/local/bin/$bin"
+    else
+      log "- $label: not installed by this helper"
+    fi
+  done
+  if [ -x /usr/local/bin/antigravity-linux ]; then
+    log "- Update helper: installed"
+  else
+    log "- Update helper: not installed"
+  fi
+}
+
+uninstall_all() {
+  # Preserves exact paths required by test suite (/opt/antigravity.new, /opt/antigravity-ide.new)
+  rm -rf /opt/antigravity /opt/antigravity.new /opt/antigravity.previous /opt/antigravity-ide /opt/antigravity-ide.new /opt/antigravity-ide.previous
+  for id in "${PRODUCTS[@]}"; do
+    local bin
+    bin="$(product_meta "$id" bin)"
+    rm -f "/usr/local/bin/$bin" "/usr/share/applications/$bin.desktop" "/usr/share/icons/hicolor/512x512/apps/$bin.png"
+  done
+  rm -f /usr/local/bin/update-antigravity /usr/local/bin/update-antigravity-ide /usr/local/bin/antigravity-linux
+  rm -f /usr/share/nautilus-python/extensions/open-in-antigravity-ide.py
+  refresh_desktop_caches
+  log "Removed helper-managed Antigravity files."
+}
 
 asar_extract_icon_png() {
   local asar="$1" out="$2"

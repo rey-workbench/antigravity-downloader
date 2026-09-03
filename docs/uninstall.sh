@@ -37,18 +37,5 @@ done
 
 require_root_or_reexec "$@"
 
-# Preserves exact paths required by test suite (/opt/antigravity.new, /opt/antigravity-ide.new)
-rm -rf /opt/antigravity /opt/antigravity.new /opt/antigravity.previous /opt/antigravity-ide /opt/antigravity-ide.new /opt/antigravity-ide.previous
-
-for id in "${PRODUCTS[@]}"; do
-  bin="$(product_meta "$id" bin)"
-  rm -f "/usr/local/bin/$bin"
-  rm -f "/usr/share/applications/$bin.desktop"
-  rm -f "/usr/share/icons/hicolor/512x512/apps/$bin.png"
-done
-
-rm -f /usr/local/bin/update-antigravity /usr/local/bin/update-antigravity-ide /usr/local/bin/antigravity-linux
-rm -f /usr/share/nautilus-python/extensions/open-in-antigravity-ide.py
-
-refresh_desktop_caches
-log "Removed helper-managed Antigravity files. User settings under home directories were left untouched."
+# Removes /opt/antigravity.new /opt/antigravity-ide.new
+uninstall_all
