@@ -66,7 +66,7 @@ Options:
   --ide                  Install/update Antigravity IDE only
   --all                  Install/update Antigravity 2.0 desktop app + Antigravity IDE
   --cli                  Also run Google's official Antigravity CLI installer
-  --no-apt               Do not install apt dependencies automatically
+  --no-deps, --no-apt    Do not install package dependencies automatically
   --force                Reinstall even when the recorded version matches
   --install-url URL      Store URL used by the antigravity-linux update command
   --status               Show installed helper-managed apps and versions
@@ -92,7 +92,7 @@ while [ $# -gt 0 ]; do
     --all) INSTALL_DESKTOP=1; INSTALL_IDE=1 ;;
     --cli) INSTALL_CLI=1 ;;
     --no-nautilus) ;;
-    --no-apt) INSTALL_DEPS=0 ;;
+    --no-apt|--no-deps) INSTALL_DEPS=0 ;;
     --force) FORCE=1 ;;
     --install-url)
       shift
@@ -112,13 +112,25 @@ done
 # ==============================================================================
 # Installer Engine
 # ==============================================================================
-install_deps_debian() {
+install_deps() {
   [ "$INSTALL_DEPS" -eq 1 ] || return 0
   if command -v apt-get >/dev/null 2>&1; then
     export DEBIAN_FRONTEND=noninteractive
-    apt-get update
+    apt-get update -qq
     apt-get install -y ca-certificates curl tar python3 desktop-file-utils xdg-utils aria2 2>/dev/null || \
       apt-get install -y ca-certificates curl tar python3 desktop-file-utils xdg-utils
+  elif command -v dnf >/dev/null 2>&1; then
+    dnf install -y curl tar python3 desktop-file-utils xdg-utils aria2 2>/dev/null || \
+      dnf install -y curl tar python3 desktop-file-utils xdg-utils
+  elif command -v pacman >/dev/null 2>&1; then
+    pacman -Sy --noconfirm --needed curl tar python desktop-file-utils xdg-utils aria2 2>/dev/null || \
+      pacman -Sy --noconfirm --needed curl tar python desktop-file-utils xdg-utils
+  elif command -v zypper >/dev/null 2>&1; then
+    zypper --non-interactive install curl tar python3 desktop-file-utils xdg-utils aria2 2>/dev/null || \
+      zypper --non-interactive install curl tar python3 desktop-file-utils xdg-utils
+  elif command -v apk >/dev/null 2>&1; then
+    apk add --no-cache curl tar python3 desktop-file-utils xdg-utils aria2 gcompat 2>/dev/null || \
+      apk add --no-cache curl tar python3 desktop-file-utils xdg-utils
   else
     for c in curl tar python3; do need "$c"; done
   fi
@@ -296,7 +308,7 @@ main() {
   fi
 
   require_root_or_reexec "${ORIGINAL_ARGS[@]}"
-  install_deps_debian
+  install_deps
   local tmp_parent="${TMPDIR:-/var/tmp}"
   mkdir -p "$tmp_parent"
   local tmpdir

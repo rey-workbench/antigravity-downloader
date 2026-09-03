@@ -131,7 +131,7 @@ The uninstall removes helper-managed files from `/opt`, `/usr/local/bin`, `/usr/
 --all              Install/update desktop app + IDE
 --cli              Also run Google's official Antigravity CLI installer
 --no-nautilus      Skip GNOME Files/Nautilus context-menu helper
---no-apt           Do not install apt dependencies automatically
+--no-deps, --no-apt Do not install package dependencies automatically
 --force            Reinstall even when the recorded version matches
 --install-url URL  Store URL used by the antigravity-linux update command
 --status           Show installed helper-managed apps and versions
@@ -150,22 +150,16 @@ The uninstall removes helper-managed files from `/opt`, `/usr/local/bin`, `/usr/
 | Update helper | `/usr/local/bin/antigravity-linux` |
 | App launchers | `/usr/share/applications/antigravity*.desktop` |
 | Icons | `/usr/share/icons/hicolor/512x512/apps/` |
-| Nautilus extension | `/usr/share/nautilus-python/extensions/open-in-antigravity-ide.py` |
 
 ## Supported systems
 
-Designed for Debian/Ubuntu-based distributions with `apt-get`.
-
-The script can also run on other Linux distributions if the required tools already exist:
-
-- `bash`
-- `curl`
-- `tar`
-- `python3`
-- `desktop-file-utils`
-- `xdg-utils`
-
-GNOME Files/Nautilus integration additionally needs `python3-nautilus`.
+Universal Linux distribution support with automatic package resolution:
+- **Debian / Ubuntu / Linux Mint / Pop!_OS / Zorin** (`apt-get`)
+- **Fedora / RHEL / CentOS / Rocky / Alma** (`dnf`)
+- **Arch Linux / Manjaro / EndeavourOS** (`pacman`)
+- **openSUSE Leap & Tumbleweed** (`zypper`)
+- **Alpine Linux** (`apk` with `gcompat`)
+- Any other Linux distribution with `curl`, `tar`, and `python3`.
 
 ## GitHub Pages setup
 
