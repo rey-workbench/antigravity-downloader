@@ -37,8 +37,11 @@ This project does **not** mirror, modify, or redistribute Google Antigravity. Th
   - `sudo antigravity-linux update --all`
 - Adds folder opening integration for IDE:
   - file manager `Open With` support through `.desktop` MIME entries
-  - optional GNOME Files/Nautilus right-click menu helper
 - Preserves the Electron/Chromium sandbox permission model instead of launching with `--no-sandbox` by default.
+- Verifies downloads before extraction:
+  - only accepts tarball URLs from official `antigravity.google` hosts
+  - gzip integrity check before extraction
+  - records the tarball sha256 (shown via `--status`)
 
 ## Minimum Requirements
 > `glibc >= 2.28, glibcxx >= 3.4.25 (e.g. Ubuntu 20. Debian 10, Fedora 36, RHEL 8)`
@@ -84,13 +87,13 @@ sudo antigravity-linux update --all
 Desktop app only:
 
 ```bash
-sudo update-antigravity
+sudo antigravity-linux update --desktop
 ```
 
 IDE only:
 
 ```bash
-sudo update-antigravity-ide
+sudo antigravity-linux update --ide
 ```
 
 ## Status
@@ -121,16 +124,14 @@ For local-checkout installs without a stored installer URL, use the local script
 sudo bash install.sh --uninstall
 ```
 
-The uninstall removes helper-managed files from `/opt`, `/usr/local/bin`, `/usr/share/applications`, `/usr/share/icons`, and the Nautilus extension path. It does not delete user settings in home directories.
+The uninstall removes helper-managed files from `/opt`, `/usr/local/bin`, `/usr/share/applications`, and `/usr/share/icons`. It does not delete user settings in home directories.
 
 ## Options
 
 ```text
 --desktop          Install/update Antigravity 2.0 desktop app only
 --ide              Install/update Antigravity IDE only
---all              Install/update desktop app + IDE
---cli              Also run Google's official Antigravity CLI installer
---no-nautilus      Skip GNOME Files/Nautilus context-menu helper
+--all              Install/update desktop app + IDE--cli                Also run Google's official Antigravity CLI installer
 --no-deps, --no-apt Do not install package dependencies automatically
 --force            Reinstall even when the recorded version matches
 --install-url URL  Store URL used by the antigravity-linux update command
@@ -153,13 +154,20 @@ The uninstall removes helper-managed files from `/opt`, `/usr/local/bin`, `/usr/
 
 ## Supported systems
 
-Universal Linux distribution support with automatic package resolution:
+The installer resolves dependencies with the first package manager it finds:
 - **Debian / Ubuntu / Linux Mint / Pop!_OS / Zorin** (`apt-get`)
 - **Fedora / RHEL / CentOS / Rocky / Alma** (`dnf`)
 - **Arch Linux / Manjaro / EndeavourOS** (`pacman`)
 - **openSUSE Leap & Tumbleweed** (`zypper`)
-- **Alpine Linux** (`apk` with `gcompat`)
-- Any other Linux distribution with `curl`, `tar`, and `python3`.
+- **Alpine Linux** (`apk`, best-effort via `gcompat`)
+- Any other Linux distribution with `curl`, `tar`, `python3`, and `gzip`.
+
+Confirmed working:
+
+- Ubuntu 24 (LTS)
+- Debian 12 / 13
+
+Everything else is best-effort and untested — if it works or breaks on your distro, please [open an issue](https://github.com/rey-workbench/antigravity-downloader/issues/new).
 
 ## GitHub Pages setup
 
@@ -207,6 +215,8 @@ sudo bash install.sh --all
 
 This installer uses `sudo` because it installs system-wide files under `/opt`, `/usr/local/bin`, `/usr/share/applications`, and `/usr/share/icons`.
 
+Downloads are restricted to official `antigravity.google` hosts, and every tarball is checked for gzip integrity before extraction. The tarball sha256 is recorded under the install directory and shown by `--status`, so you can audit what was installed. Note there is no vendor-published checksum to compare against — the recorded hash documents the download, it does not authenticate it.
+
 For safer review before running:
 
 ```bash
@@ -222,11 +232,6 @@ Contributions are welcome! Please open an issue or submit a pull request.
 > Read the [contributing guidelines](CONTRIBUTING.md) for more information.
 
 The easiest way to contribute is to check whether this works smoothly on your OS and if any issues arise, [open an issue](https://github.com/rey-workbench/antigravity-downloader/issues/new), describe the problem, your system details, and screenshots (if possible).
-
-### Currently Confirmed OSes
-
-- Ubuntu 24 (LTS)
-- Debian 12 / 13
 
 ## License
 

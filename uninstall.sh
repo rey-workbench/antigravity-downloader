@@ -37,5 +37,5 @@ done
 
 require_root_or_reexec "$@"
 
-# Removes /opt/antigravity.new /opt/antigravity-ide.new
+# Registry-driven removal of helper-managed files (see uninstall_all in lib/common.sh)
 uninstall_all

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Antigravity Linux Installer
-# Installs/updates Google Antigravity 2.0 and Antigravity IDE on Debian/Ubuntu.
+# Installs/updates Google Antigravity 2.0 and Antigravity IDE on Linux.
 # Resolves latest official Google tarballs from https://antigravity.google/download.
 set -euo pipefail
 
@@ -11,7 +11,7 @@ if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/lib/common.sh" ]; then
 else
   BASE_URL="${ANTIGRAVITY_LINUX_BASE_URL:-${ANTIGRAVITY_LINUX_INSTALLER_URL%/*}}"
   [ -n "$BASE_URL" ] || BASE_URL="https://rey-workbench.github.io/antigravity-downloader"
-  source <(curl -fsSL "$BASE_URL/lib/common.sh")
+  source <(curl -fsSL --retry 3 "$BASE_URL/lib/common.sh")
 fi
 
 # ==============================================================================
@@ -91,7 +91,6 @@ while [ $# -gt 0 ]; do
     --ide) INSTALL_DESKTOP=0; INSTALL_IDE=1 ;;
     --all) INSTALL_DESKTOP=1; INSTALL_IDE=1 ;;
     --cli) INSTALL_CLI=1 ;;
-    --no-nautilus) ;;
     --no-apt|--no-deps) INSTALL_DEPS=0 ;;
     --force) FORCE=1 ;;
     --install-url)
@@ -117,22 +116,25 @@ install_deps() {
   if command -v apt-get >/dev/null 2>&1; then
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq
-    apt-get install -y ca-certificates curl tar python3 desktop-file-utils xdg-utils aria2 2>/dev/null || \
-      apt-get install -y ca-certificates curl tar python3 desktop-file-utils xdg-utils
+    apt-get install -y ca-certificates curl tar python3 gzip sha256sum desktop-file-utils xdg-utils aria2 \
+      || apt-get install -y ca-certificates curl tar python3 gzip sha256sum desktop-file-utils xdg-utils \
+      || err "Dependency installation failed; fix the errors above or re-run with --no-deps"
   elif command -v dnf >/dev/null 2>&1; then
-    dnf install -y curl tar python3 desktop-file-utils xdg-utils aria2 2>/dev/null || \
-      dnf install -y curl tar python3 desktop-file-utils xdg-utils
+    dnf install -y curl tar python3 gzip coreutils-single coreutils desktop-file-utils xdg-utils aria2 \
+      || dnf install -y curl tar python3 gzip coreutils desktop-file-utils xdg-utils \
+      || err "Dependency installation failed; fix the errors above or re-run with --no-deps"
   elif command -v pacman >/dev/null 2>&1; then
-    pacman -Sy --noconfirm --needed curl tar python desktop-file-utils xdg-utils aria2 2>/dev/null || \
-      pacman -Sy --noconfirm --needed curl tar python desktop-file-utils xdg-utils
+    pacman -Sy --noconfirm --needed curl tar python gzip coreutils desktop-file-utils xdg-utils aria2 \
+      || err "Dependency installation failed; fix the errors above or re-run with --no-deps"
   elif command -v zypper >/dev/null 2>&1; then
-    zypper --non-interactive install curl tar python3 desktop-file-utils xdg-utils aria2 2>/dev/null || \
-      zypper --non-interactive install curl tar python3 desktop-file-utils xdg-utils
+    zypper --non-interactive install curl tar python3 gzip coreutils desktop-file-utils xdg-utils aria2 \
+      || err "Dependency installation failed; fix the errors above or re-run with --no-deps"
   elif command -v apk >/dev/null 2>&1; then
-    apk add --no-cache curl tar python3 desktop-file-utils xdg-utils aria2 gcompat 2>/dev/null || \
-      apk add --no-cache curl tar python3 desktop-file-utils xdg-utils
+    apk add --no-cache curl tar python3 gzip libstdc++ gcompat desktop-file-utils xdg-utils aria2 \
+      || apk add --no-cache curl tar python3 gzip libstdc++ gcompat desktop-file-utils xdg-utils \
+      || err "Dependency installation failed; fix the errors above or re-run with --no-deps"
   else
-    for c in curl tar python3; do need "$c"; done
+    for c in curl tar python3 gzip sha256sum; do need "$c"; done
   fi
 }
 
@@ -186,11 +188,14 @@ install_app() {
   tar -xzf "$tmpdir/$archive" -C "$tmpdir"
   [ -x "$tmpdir/$top_dir/$bin" ] || err "$label launcher not found inside tarball."
 
+  # Clean any staging directory left over by an interrupted previous run.
   rm -rf "${root}.new"
   mkdir -p "${root}.new/$install_sub"
   cp -a "$tmpdir/$top_dir/." "${root}.new/$install_sub/"
   printf '%s\n' "$version" > "${root}.new/.antigravity-linux-version"
   printf '%s\n' "$url" > "${root}.new/.antigravity-linux-source-url"
+  [ -f "$tmpdir/$archive.sha256" ] && \
+    cp "$tmpdir/$archive.sha256" "${root}.new/.antigravity-linux-sha256"
   fix_chrome_sandbox "${root}.new/$install_sub/chrome-sandbox"
   safe_replace_dir "${root}.new" "$root"
 
@@ -228,9 +233,9 @@ set -euo pipefail
 SCRIPT_URL="${installer_url}"
 [ -n "\$SCRIPT_URL" ] || SCRIPT_URL="https://rey-workbench.github.io/antigravity-downloader/install.sh"
 if [ "\$(id -u)" -eq 0 ]; then
-  curl -fsSL "\$SCRIPT_URL" | env ANTIGRAVITY_LINUX_INSTALLER_URL="\$SCRIPT_URL" bash -s -- "\$@"
+  curl -fsSL --retry 3 "\$SCRIPT_URL" | env ANTIGRAVITY_LINUX_INSTALLER_URL="\$SCRIPT_URL" bash -s -- "\$@"
 else
-  curl -fsSL "\$SCRIPT_URL" | sudo -E env ANTIGRAVITY_LINUX_INSTALLER_URL="\$SCRIPT_URL" bash -s -- "\$@"
+  curl -fsSL --retry 3 "\$SCRIPT_URL" | sudo -E env ANTIGRAVITY_LINUX_INSTALLER_URL="\$SCRIPT_URL" bash -s -- "\$@"
 fi
 SH
   chmod +x /usr/local/bin/antigravity-linux
@@ -298,7 +303,6 @@ main() {
 
   if [ "$DO_UNINSTALL" -eq 1 ]; then
     require_root_or_reexec "$@"
-    # Removes /opt/antigravity.new /opt/antigravity-ide.new
     uninstall_all
     exit 0
   fi
@@ -334,9 +338,9 @@ main() {
   if [ "$INSTALL_CLI" -eq 1 ]; then
     log "Running Google's official Antigravity CLI installer for the non-root user..."
     if [ -n "${SUDO_USER:-}" ] && [ "${SUDO_USER:-}" != "root" ]; then
-      sudo -u "$SUDO_USER" -H bash -lc "curl -fsSL '$CLI_INSTALLER' | bash"
+      sudo -u "$SUDO_USER" -H bash -lc "curl -fsSL --retry 3 '$CLI_INSTALLER' | bash"
     else
-      curl -fsSL "$CLI_INSTALLER" | bash
+      curl -fsSL --retry 3 "$CLI_INSTALLER" | bash
     fi
   fi
   install_manager_command

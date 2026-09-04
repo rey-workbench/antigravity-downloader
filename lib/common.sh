@@ -75,13 +75,28 @@ require_root_or_reexec() {
   err "This command needs root. Re-run with: sudo -E bash <script>"
 }
 
+# Only accept tarball URLs from Google's official Antigravity hosts.
+is_official_url() {
+  case "$1" in
+    https://antigravity.google/*|https://*.antigravity.google/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 safe_replace_dir() {
-  local newdir="$1" target="$2"
-  rm -rf "${target}.previous"
+  local newdir="$1" target="$2" prev="${2}.previous"
+  rm -rf "$prev"
   if [ -d "$target" ]; then
-    mv "$target" "${target}.previous"
+    mv "$target" "$prev"
   fi
-  mv "$newdir" "$target"
+  if ! mv "$newdir" "$target"; then
+    if [ -d "$prev" ] && [ ! -d "$target" ]; then
+      mv "$prev" "$target"
+      warn "Swap failed; previous installation restored at $target"
+    fi
+    err "Failed to move staged installation into place at $target"
+  fi
+  rm -rf "$prev"
 }
 
 fix_chrome_sandbox() {
@@ -106,17 +121,36 @@ installed_version() {
   cat "$file" 2>/dev/null || true
 }
 
+# Download from Google's official hosts only; verify gzip integrity; record sha256.
 fast_download() {
   local url="$1" dest="$2"
+  if ! is_official_url "$url"; then
+    err "Refusing to download from a non-official URL: $url"
+  fi
   if command -v aria2c >/dev/null 2>&1; then
     local dir filename
     dir="$(dirname "$dest")"
     filename="$(basename "$dest")"
     aria2c -q --show-console-readout=false --summary-interval=0 \
-      -x 8 -s 8 -j 8 -k 1M --allow-overwrite=true \
-      -d "$dir" -o "$filename" "$url" || curl -fsSL --retry 3 -o "$dest" "$url"
+      -x 8 -s 8 -j 8 -k 1M --allow-overwrite=true --check-certificate=true \
+      -d "$dir" -o "$filename" "$url" \
+      || err "aria2c download failed: $url"
   else
-    curl -fsSL --retry 3 -o "$dest" "$url"
+    curl -fsSL --retry 3 -o "$dest" "$url" \
+      || err "Download failed: $url"
+  fi
+  if [ ! -s "$dest" ]; then
+    err "Downloaded file is empty: $url"
+  fi
+  # A corrupted or tampered .tar.gz must not reach extraction (runs as root).
+  if [ "$(head -c 2 "$dest" | od -An -tx1 | tr -d ' \n')" != "1f8b" ]; then
+    err "Downloaded file is not a valid gzip archive: $url"
+  fi
+  if command -v gzip >/dev/null 2>&1; then
+    gzip -t "$dest" || err "Downloaded archive failed gzip integrity check: $url"
+  fi
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$dest" | awk '{print $1}' > "${dest}.sha256"
   fi
 }
 
@@ -192,24 +226,29 @@ for section in sections:
     if url:
         break
 
-if url:
-    print(version_from_url(url), url)
-    sys.exit(0)
+if not url:
+    sys.exit(f'Could not find official {label} tarball for {platform} on official Google download page')
+if not (url.startswith('https://antigravity.google/') or '.antigravity.google/' in url):
+    sys.exit(f'Refusing non-official {label} download URL: {url}')
 
-sys.exit(f'Could not find official {label} tarball for {platform} on official Google download page')
+print(version_from_url(url), url)
 PY
 }
 
 show_status() {
   log "Antigravity Linux status"
   for id in "${PRODUCTS[@]}"; do
-    local label bin root ver_file
+    local label bin root ver_file sha_file
     label="$(product_meta "$id" label)"
     bin="$(product_meta "$id" bin)"
     root="$(product_meta "$id" root)"
     ver_file="$root/.antigravity-linux-version"
+    sha_file="$root/.antigravity-linux-sha256"
     if [ -x "/usr/local/bin/$bin" ]; then
       log "- $label: installed ($(installed_version "$ver_file"))"
+      if [ -s "$sha_file" ]; then
+        log "  Tarball sha256: $(cat "$sha_file")"
+      fi
       log "  Command: /usr/local/bin/$bin"
     else
       log "- $label: not installed by this helper"
@@ -222,16 +261,17 @@ show_status() {
   fi
 }
 
+# Derive every path from the product registry so uninstall cannot drift.
 uninstall_all() {
-  # Preserves exact paths required by test suite (/opt/antigravity.new, /opt/antigravity-ide.new)
-  rm -rf /opt/antigravity /opt/antigravity.new /opt/antigravity.previous /opt/antigravity-ide /opt/antigravity-ide.new /opt/antigravity-ide.previous
+  local root bin
   for id in "${PRODUCTS[@]}"; do
-    local bin
     bin="$(product_meta "$id" bin)"
-    rm -f "/usr/local/bin/$bin" "/usr/share/applications/$bin.desktop" "/usr/share/icons/hicolor/512x512/apps/$bin.png"
+    root="$(product_meta "$id" root)"
+    rm -rf "$root" "${root}.new" "${root}.previous"
+    rm -f "/usr/local/bin/$bin" "/usr/share/applications/$bin.desktop" \
+          "/usr/share/icons/hicolor/512x512/apps/$bin.png"
   done
-  rm -f /usr/local/bin/update-antigravity /usr/local/bin/update-antigravity-ide /usr/local/bin/antigravity-linux
-  rm -f /usr/share/nautilus-python/extensions/open-in-antigravity-ide.py
+  rm -f /usr/local/bin/antigravity-linux
   refresh_desktop_caches
   log "Removed helper-managed Antigravity files."
 }
